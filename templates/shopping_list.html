@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+
+{% block title %}Shopping List - Family Meal Planner{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">Home</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Shopping List</li>
+            </ol>
+        </nav>
+        
+        <h1><i class="fas fa-shopping-cart me-2"></i>Shopping List</h1>
+        <p class="text-muted">Based on your current meal plan</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-list me-2"></i>Ingredients to Buy</span>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary me-2" id="print-list">
+                        <i class="fas fa-print me-1"></i> Print
+                    </button>
+                    <form action="{{ url_for('add_to_tesco') }}" method="post" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="fas fa-shopping-cart me-1"></i> Add to Tesco Cart
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if shopping_list %}
+                    <div class="shopping-list">
+                        {% set categories = {} %}
+                        
+                        {# First, group all items by category #}
+                        {% for item in shopping_list %}
+                            {% if item.category not in categories %}
+                                {% set _ = categories.update({item.category: []}) %}
+                            {% endif %}
+                            {% set _ = categories[item.category].append(item) %}
+                        {% endfor %}
+                        
+                        {# Then, display each category with all its items #}
+                        {% for category, items in categories.items()|sort %}
+                            <h5 class="mt-3 mb-2 category-header">{{ category|title }}</h5>
+                            <ul class="list-group mb-3">
+                            
+                                {% for item in items %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div class="form-check">
+                                        <input class="form-check-input shopping-item-check" type="checkbox" id="item-{{ loop.index }}">
+                                        <label class="form-check-label" for="item-{{ loop.index }}">
+                                            <span class="item-quantity">{{ item.quantity }}</span>
+                                            {% if item.unit %}
+                                                <span class="item-unit">{{ item.unit }}</span>
+                                            {% endif %}
+                                            <span class="item-name">{{ item.name }}</span>
+                                        </label>
+                                    </div>
+                                    <button class="btn btn-sm btn-link text-danger remove-item" data-index="{{ loop.index }}">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-shopping-basket fa-3x mb-3 text-muted"></i>
+                        <h5>No items in your shopping list</h5>
+                        <p>Generate a meal plan first to create a shopping list.</p>
+                        <a href="{{ url_for('index') }}" class="btn btn-primary">
+                            <i class="fas fa-home me-1"></i> Go to Dashboard
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-info-circle me-2"></i>Shopping List Info
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6><i class="fas fa-calendar-alt me-2"></i>Based on Meal Plan</h6>
+                    <p>{{ meal_plan_dates }}</p>
+                </div>
+                <div class="mb-3">
+                    <h6><i class="fas fa-utensils me-2"></i>Meals Included</h6>
+                    <ul class="list-unstyled">
+                        {% for day in meal_plan.days %}
+                            <li><small>• {{ day.meal }}</small></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% if tesco_result %}
+                    <div class="alert {% if tesco_result.success %}alert-success{% else %}alert-warning{% endif %} mt-3">
+                        <h6>
+                            <i class="fas {% if tesco_result.success %}fa-check-circle{% else %}fa-exclamation-triangle{% endif %} me-2"></i>
+                            Tesco Cart Update
+                        </h6>
+                        <p class="mb-0">{{ tesco_result.message }}</p>
+                        {% if tesco_result.success %}
+                            <p class="mt-2 mb-0">Total: £{{ tesco_result.total_price }}</p>
+                            <a href="{{ tesco_result.cart_url }}" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
+                                <i class="fas fa-external-link-alt me-1"></i> View Tesco Cart
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-lightbulb me-2"></i>Tips
+            </div>
+            <div class="card-body">
+                <ul class="small">
+                    <li>Check your pantry before shopping to avoid buying items you already have.</li>
+                    <li>Click items to mark them as collected while shopping.</li>
+                    <li>Use the print button to get a physical copy of your list.</li>
+                    <li>The "Add to Tesco Cart" button will add all items to your online Tesco shopping cart.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle printing
+        document.getElementById('print-list').addEventListener('click', function() {
+            window.print();
+        });
+        
+        // Handle item removal
+        document.querySelectorAll('.remove-item').forEach(function(button) {
+            button.addEventListener('click', function() {
+                const listItem = this.closest('li');
+                listItem.remove();
+                
+                // Check if category is now empty
+                const category = listItem.closest('ul');
+                if (category.children.length === 0) {
+                    category.previousElementSibling.remove(); // Remove category header
+                    category.remove(); // Remove empty category list
+                }
+            });
+        });
+        
+        // Handle item checking
+        document.querySelectorAll('.shopping-item-check').forEach(function(checkbox) {
+            checkbox.addEventListener('change', function() {
+                const label = this.nextElementSibling;
+                if (this.checked) {
+                    label.style.textDecoration = 'line-through';
+                    label.style.color = '#6c757d';
+                } else {
+                    label.style.textDecoration = 'none';
+                    label.style.color = '';
+                }
+            });
+        });
+    });
+</script>
+
+<style>
+    @media print {
+        .breadcrumb, .card-header, .btn, .remove-item, .form-check-input, nav, footer, .col-lg-4 {
+            display: none !important;
+        }
+        
+        .card {
+            border: none !important;
+        }
+        
+        .card-body {
+            padding: 0 !important;
+        }
+        
+        .category-header {
+            margin-top: 15px !important;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 5px;
+        }
+        
+        .list-group-item {
+            border: none !important;
+            padding: 5px 0 !important;
+        }
+        
+        body {
+            font-size: 12pt;
+        }
+        
+        h1 {
+            font-size: 18pt;
+            margin-bottom: 10px !important;
+        }
+        
+        h5 {
+            font-size: 14pt;
+        }
+        
+        .col-lg-8 {
+            width: 100% !important;
+            max-width: 100% !important;
+            flex: 0 0 100% !important;
+        }
+    }
+</style>
+{% endblock %}

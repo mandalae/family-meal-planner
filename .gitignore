@@ -1,0 +1,22 @@
+# Environment variables
+.env
+
+# Python virtual environment
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# User data
+preferences.json
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

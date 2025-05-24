@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Family Meal Planner{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1><i class="fas fa-utensils me-2"></i>Family Meal Dashboard</h1>
+            <div id="generation-controls">
+                {% if generation_in_progress %}
+                    <div class="generation-progress">
+                        <div class="progress mb-2">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                        </div>
+                        <p class="text-muted">Generating meal plan and shopping list...</p>
+                    </div>
+                {% else %}
+                    <form action="{{ url_for('generate_plan') }}" method="post">
+                        <button type="submit" class="btn btn-primary" id="generate-btn">
+                            <i class="fas fa-magic me-1"></i> Generate New Meal Plan
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+        <p class="text-muted">Plan delicious and healthy meals for your family with AI assistance</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-calendar-alt me-2"></i>Current Meal Plan
+            </div>
+            <div class="card-body">
+                {% if current_plan %}
+                    <div class="d-flex justify-content-between mb-3">
+                        <h5>Week Starting: {{ current_plan.week_starting.split('T')[0] if 'T' in current_plan.week_starting else current_plan.week_starting }}</h5>
+                        <div>
+                            <a href="{{ url_for('shopping_list') }}" class="btn btn-sm btn-success me-2">
+                                <i class="fas fa-shopping-cart me-1"></i> Create Shopping List
+                            </a>
+                            <span class="badge bg-secondary">Generated: {{ current_plan.date_generated.split('T')[0] if 'T' in current_plan.date_generated else current_plan.date_generated }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        {% for day in current_plan.days %}
+                            <div class="col-md-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h6 class="meal-day">{{ day.day }}</h6>
+                                        <h5 class="meal-title">{{ day.meal }}</h5>
+                                        <p class="meal-description">{{ day.description }}</p>
+                                        
+                                        {% if day.contains_oily_fish %}
+                                            <span class="badge oily-fish-badge">
+                                                <i class="fas fa-fish me-1"></i> Oily Fish
+                                            </span>
+                                        {% endif %}
+                                        
+                                        <div class="mt-3">
+                                            <a href="{{ url_for('view_recipe', plan_index=(meal_history|length - 1), day_index=loop.index0) }}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-book-open me-1"></i> View Recipe
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-utensils fa-3x mb-3 text-muted"></i>
+                        <h5>No meal plan generated yet</h5>
+                        <p>Click the "Generate New Meal Plan" button to create your first meal plan!</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-info-circle me-2"></i>Family Information
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6><i class="fas fa-users me-2"></i>Members</h6>
+                    <p>{{ family_info.members }} family members</p>
+                </div>
+                <div class="mb-3">
+                    <h6><i class="fas fa-child me-2"></i>Children</h6>
+                    <p>Ages: {{ family_info.children_ages|join(', ') }}</p>
+                </div>
+                <div class="mt-3">
+                    <a href="{{ url_for('preferences') }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-pencil-alt me-1"></i> Edit Family Info
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-heart me-2"></i>Food Preferences
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6><i class="fas fa-thumbs-up me-2 text-success"></i>Liked Foods</h6>
+                    {% if liked_foods %}
+                        <div>
+                            {% for food in liked_foods %}
+                                <span class="preference-tag">{{ food }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No liked foods added yet</p>
+                    {% endif %}
+                </div>
+                
+                <div class="mb-3">
+                    <h6><i class="fas fa-thumbs-down me-2 text-danger"></i>Disliked Foods</h6>
+                    {% if disliked_foods %}
+                        <div>
+                            {% for food in disliked_foods %}
+                                <span class="preference-tag">{{ food }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No disliked foods added yet</p>
+                    {% endif %}
+                </div>
+                
+                <div class="mt-3">
+                    <a href="{{ url_for('preferences') }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-sliders-h me-1"></i> Manage Preferences
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Check if generation is in progress when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        const generationControls = document.getElementById('generation-controls');
+        
+        if (generationControls.querySelector('.generation-progress')) {
+            // If generation is in progress, start polling
+            pollGenerationStatus();
+        }
+        
+        // Add event listener to the generate button
+        const generateBtn = document.getElementById('generate-btn');
+        if (generateBtn) {
+            generateBtn.addEventListener('click', function() {
+                // Show progress bar immediately when button is clicked
+                showProgressBar();
+            });
+        }
+    });
+    
+    function showProgressBar() {
+        const generationControls = document.getElementById('generation-controls');
+        generationControls.innerHTML = `
+            <div class="generation-progress">
+                <div class="progress mb-2">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                </div>
+                <p class="text-muted">Generating meal plan and shopping list...</p>
+            </div>
+        `;
+    }
+    
+    function pollGenerationStatus() {
+        // Poll the server every 2 seconds to check if generation is complete
+        const pollInterval = setInterval(function() {
+            fetch('{{ url_for("generation_status") }}')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.in_progress) {
+                        // Generation is complete, reload the page to show the new meal plan
+                        clearInterval(pollInterval);
+                        window.location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking generation status:', error);
+                });
+        }, 2000);
+    }
+</script>
+{% endblock %}

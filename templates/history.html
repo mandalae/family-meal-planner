@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Meal History - Family Meal Planner{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <h1><i class="fas fa-history me-2"></i>Meal Planning History</h1>
+        <p class="text-muted">View your past meal plans and recipes</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        {% if meal_history %}
+            <div class="timeline">
+                {% for plan in meal_history|reverse %}
+                    {% set plan_index = loop.index0 %}
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>
+                                <i class="fas fa-calendar-alt me-2"></i>
+                                Week Starting: {{ plan.week_starting.split('T')[0] if 'T' in plan.week_starting else plan.week_starting }}
+                            </span>
+                            <span class="badge bg-secondary">
+                                Generated: {{ plan.date_generated.split('T')[0] if 'T' in plan.date_generated else plan.date_generated }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                {% for day in plan.days %}
+                                    {% set day_index = loop.index0 %}
+                                    <div class="col-md-4 mb-3">
+                                        <div class="card h-100">
+                                            <div class="card-body">
+                                                <h6 class="meal-day">{{ day.day }}</h6>
+                                                <h5 class="meal-title">{{ day.meal }}</h5>
+                                                <p class="meal-description">{{ day.description }}</p>
+                                                
+                                                {% if day.contains_oily_fish %}
+                                                    <span class="badge oily-fish-badge">
+                                                        <i class="fas fa-fish me-1"></i> Oily Fish
+                                                    </span>
+                                                {% endif %}
+                                                
+                                                <div class="mt-3">
+                                                    <a href="{{ url_for('view_recipe', plan_index=plan_index, day_index=day_index) }}" class="btn btn-sm btn-outline-primary">
+                                                        <i class="fas fa-book-open me-1"></i> View Recipe
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-history fa-3x mb-3 text-muted"></i>
+                    <h5>No meal planning history yet</h5>
+                    <p>Generate your first meal plan to see it here!</p>
+                    <a href="{{ url_for('index') }}" class="btn btn-primary mt-2">
+                        <i class="fas fa-home me-1"></i> Go to Dashboard
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

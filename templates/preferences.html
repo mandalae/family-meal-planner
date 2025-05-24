@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+
+{% block title %}Preferences - Family Meal Planner{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <h1><i class="fas fa-sliders-h me-2"></i>Family Preferences</h1>
+        <p class="text-muted">Manage your family's food preferences and information</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-thumbs-up me-2"></i>Liked Foods
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('preferences') }}" method="post" class="mb-4">
+                    <input type="hidden" name="action" value="add_liked">
+                    <div class="input-group">
+                        <input type="text" name="food" class="form-control" placeholder="Add a food your family likes..." required>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i> Add
+                        </button>
+                    </div>
+                </form>
+                
+                {% if liked_foods %}
+                    <div>
+                        {% for food in liked_foods %}
+                            <div class="preference-tag">
+                                {{ food }}
+                                <form action="{{ url_for('preferences') }}" method="post" class="d-inline">
+                                    <input type="hidden" name="action" value="remove_liked">
+                                    <input type="hidden" name="food" value="{{ food }}">
+                                    <button type="submit" class="btn btn-sm btn-link text-danger p-0 ms-2">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">No liked foods added yet</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-thumbs-down me-2"></i>Disliked Foods
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('preferences') }}" method="post" class="mb-4">
+                    <input type="hidden" name="action" value="add_disliked">
+                    <div class="input-group">
+                        <input type="text" name="food" class="form-control" placeholder="Add a food your family dislikes..." required>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-plus me-1"></i> Add
+                        </button>
+                    </div>
+                </form>
+                
+                {% if disliked_foods %}
+                    <div>
+                        {% for food in disliked_foods %}
+                            <div class="preference-tag">
+                                {{ food }}
+                                <form action="{{ url_for('preferences') }}" method="post" class="d-inline">
+                                    <input type="hidden" name="action" value="remove_disliked">
+                                    <input type="hidden" name="food" value="{{ food }}">
+                                    <button type="submit" class="btn btn-sm btn-link text-danger p-0 ms-2">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">No disliked foods added yet</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-users me-2"></i>Family Information
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('preferences') }}" method="post">
+                    <input type="hidden" name="action" value="update_family_info">
+                    
+                    <div class="mb-3">
+                        <label for="members" class="form-label">Number of Family Members</label>
+                        <input type="number" class="form-control" id="members" name="members" value="{{ family_info.members }}" min="1" max="10" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="child1_age" class="form-label">Child 1 Age</label>
+                        <input type="number" class="form-control" id="child1_age" name="child1_age" value="{{ family_info.children_ages[0] }}" min="1" max="18" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="child2_age" class="form-label">Child 2 Age</label>
+                        <input type="number" class="form-control" id="child2_age" name="child2_age" value="{{ family_info.children_ages[1] }}" min="1" max="18" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="meal_count" class="form-label">Number of Meals to Generate</label>
+                        <input type="number" class="form-control" id="meal_count" name="meal_count" value="{{ preferences.meal_count|default(3) }}" min="1" max="7" required>
+                        <div class="form-text">Choose how many meals to include in each generated meal plan (1-7)</div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i> Save Family Information
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-utensils me-2"></i>Dietary Requirements
+            </div>
+            <div class="card-body">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="oily_fish" checked disabled>
+                    <label class="form-check-label" for="oily_fish">
+                        Include oily fish weekly
+                    </label>
+                    <small class="form-text text-muted d-block">
+                        This is a default requirement for healthy family meals
+                    </small>
+                </div>
+                
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Additional dietary requirements will be added in a future update
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

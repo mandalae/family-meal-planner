@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ day.meal }} Recipe - Family Meal Planner{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('history') }}">History</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Recipe</li>
+            </ol>
+        </nav>
+        
+        <h1><i class="fas fa-utensils me-2"></i>{{ day.meal }}</h1>
+        <p class="text-muted">{{ day.description }}</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-list me-2"></i>Ingredients
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {% for ingredient in day.recipe.ingredients %}
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            {{ ingredient }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-tasks me-2"></i>Instructions
+            </div>
+            <div class="card-body">
+                <ol class="list-group list-group-numbered">
+                    {% for step in day.recipe.instructions %}
+                        <li class="list-group-item">{{ step }}</li>
+                    {% endfor %}
+                </ol>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-info-circle me-2"></i>Recipe Details
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6><i class="fas fa-clock me-2"></i>Cooking Time</h6>
+                    <p>{{ day.recipe.cooking_time }} minutes</p>
+                </div>
+                
+                <div class="mb-3">
+                    <h6><i class="fas fa-fish me-2"></i>Contains Oily Fish</h6>
+                    <p>
+                        {% if day.contains_oily_fish %}
+                            <span class="badge bg-success"><i class="fas fa-check me-1"></i> Yes</span>
+                        {% else %}
+                            <span class="badge bg-secondary"><i class="fas fa-times me-1"></i> No</span>
+                        {% endif %}
+                    </p>
+                </div>
+                
+                {% if day.recipe.source %}
+                    <div class="mb-3">
+                        <h6><i class="fas fa-external-link-alt me-2"></i>Source</h6>
+                        <p>{{ day.recipe.source }}</p>
+                    </div>
+                {% endif %}
+                
+                {% if day.recipe.url %}
+                    <div class="mb-3">
+                        <a href="{{ day.recipe.url }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-external-link-alt me-1"></i> View Original Recipe
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-share-alt me-2"></i>Share
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary" onclick="window.print()">
+                        <i class="fas fa-print me-1"></i> Print Recipe
+                    </button>
+                    <button class="btn btn-outline-success" onclick="alert('Email feature coming soon!')">
+                        <i class="fas fa-envelope me-1"></i> Email Recipe
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add any recipe-specific JavaScript here
+</script>
+{% endblock %}
