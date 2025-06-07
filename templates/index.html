@@ -157,12 +157,36 @@
             pollGenerationStatus();
         }
         
-        // Add event listener to the generate button
-        const generateBtn = document.getElementById('generate-btn');
-        if (generateBtn) {
-            generateBtn.addEventListener('click', function() {
-                // Show progress bar immediately when button is clicked
-                showProgressBar();
+        // Add event listener to the form's submit event
+        const formElement = generationControls.querySelector('form'); // Get the form within generationControls
+        if (formElement) {
+            formElement.addEventListener('submit', function(event) {
+                event.preventDefault(); // Prevent default form submission
+                showProgressBar(); // Show progress bar immediately
+
+                fetch(formElement.action, {
+                    method: 'POST',
+                    // Headers might be needed if CSRF protection is enabled, but typically not for simple Flask POSTs from its own templates
+                    // body: new FormData(formElement) // If you need to send form data, though this form is empty
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        // If the POST request itself fails, log an error and potentially show a message to the user
+                        console.error('Failed to initiate meal plan generation:', response.statusText);
+                        // Optionally, revert the progress bar or show an error message here
+                        // For now, we'll still start polling as the backend might have started despite a network hiccup
+                    }
+                    // Start polling for generation status regardless of immediate POST success/failure,
+                    // as the backend process is asynchronous and might have started.
+                    // The polling mechanism will eventually reload or handle errors.
+                    pollGenerationStatus(); 
+                })
+                .catch(error => {
+                    console.error('Error submitting form via fetch:', error);
+                    // Optionally, revert the progress bar or show an error message here
+                    // For now, we'll still start polling
+                    pollGenerationStatus(); 
+                });
             });
         }
     });

@@ -3,7 +3,7 @@ import os
 import random
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
-import openai
+from openai import OpenAI
 from rich.console import Console
 
 # Load environment variables
@@ -14,7 +14,7 @@ console = Console()
 
 class RecipeFetcher:
     """Fetches recipes from online sources or generates them using AI."""
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the recipe fetcher with optional API key."""
         self.api_key = api_key
@@ -23,22 +23,24 @@ class RecipeFetcher:
             "salmon", "mackerel", "sardines", "trout", "herring", 
             "tuna", "anchovies", "pilchards"
         ]
-        
+
         # Set up OpenAI client if API key is available
         api_key = os.getenv("OPENAI_API_KEY")
         if api_key:
-            # Set the API key for OpenAI
-            openai.api_key = api_key
-            self.client = True  # Just a flag to indicate we have API access
+            try:
+                self.client = OpenAI(api_key=api_key)
+            except Exception as e:
+                self.client = None
+                console.print(f"[yellow]Warning: Failed to initialize OpenAI client for RecipeFetcher: {e}. Using fallback methods.[/yellow]")
         else:
             self.client = None
             console.print("[yellow]Warning: No OpenAI API key found. Using fallback recipe generation.[/yellow]")
-    
+
     def is_oily_fish_recipe(self, recipe_name: str) -> bool:
         """Check if a recipe contains oily fish."""
         recipe_name_lower = recipe_name.lower()
         return any(fish in recipe_name_lower for fish in self.oily_fish)
-    
+
     def fetch_recipe(self, meal_name: str) -> Dict[str, Any]:
         """Fetch or generate a recipe for the given meal name."""
         # Try to generate a detailed recipe using AI first
@@ -49,10 +51,10 @@ class RecipeFetcher:
                     return ai_recipe
             except Exception as e:
                 console.print(f"[yellow]Error generating recipe with AI: {str(e)}. Using fallback.[/yellow]")
-        
+
         # Fallback to mock recipe if AI generation fails or is unavailable
         cooking_time = random.randint(25, 35)  # Around 30 minutes
-        
+
         # Simple mock recipe structure
         recipe = {
             "name": meal_name,
@@ -62,9 +64,9 @@ class RecipeFetcher:
             "source": "Generated recipe",
             "url": None
         }
-        
+
         return recipe
-    
+
     def _generate_ai_recipe(self, meal_name: str) -> Dict[str, Any]:
         """Generate a detailed recipe using AI."""
         try:
@@ -76,7 +78,7 @@ class RecipeFetcher:
             Use common ingredients that are easy to find in most supermarkets.
             Provide exact measurements and cooking times for a reliable result.
             """
-            
+
             user_prompt = f"""
             Please create a detailed recipe for: {meal_name}
             
@@ -94,19 +96,17 @@ class RecipeFetcher:
             - Instructions should be detailed enough that a novice cook could follow them
             - The JSON must be valid with no additional text
             """
-            
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ]
-            )
-            
+
+            response = self.client.chat.completions.create(model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ])
+
             # Extract recipe data from response
             import json
             recipe_data = json.loads(response.choices[0].message.content)
-            
+
             # Create complete recipe object
             recipe = {
                 "name": meal_name,
@@ -116,18 +116,18 @@ class RecipeFetcher:
                 "source": "AI-generated recipe",
                 "url": None
             }
-            
+
             return recipe
-            
+
         except Exception as e:
             console.print(f"[yellow]Error in AI recipe generation: {str(e)}[/yellow]")
             return None
-    
+
     def _generate_mock_ingredients(self, meal_name: str) -> List[str]:
         """Generate mock ingredients based on meal name."""
         # This is a fallback method when AI generation fails
         base_ingredients = ["2 tablespoons olive oil", "1 teaspoon salt", "1/2 teaspoon black pepper"]
-        
+
         if "burger" in meal_name.lower():
             return base_ingredients + [
                 "500g lean ground beef",
@@ -231,7 +231,7 @@ class RecipeFetcher:
                 "1 tablespoon butter or cream (optional)",
                 "1 cup stock or broth appropriate for your protein"
             ]
-    
+
     def _generate_mock_instructions(self, meal_name: str) -> List[str]:
         """Generate mock instructions based on meal name."""
         # This is a fallback method when AI generation fails
@@ -293,7 +293,7 @@ class RecipeFetcher:
                 "Taste and adjust seasoning with additional salt and pepper if needed.",
                 "Serve hot, garnished with any remaining fresh herbs."
             ]
-            
+
     def search_recipe_online(self, query: str) -> Optional[Dict[str, Any]]:
         """Search for a recipe online using an API."""
         # In a real implementation, this would call an actual recipe API

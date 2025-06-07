@@ -118,7 +118,26 @@ class MealPlanner:
             
             # Add recipes to the plan
             for day in plan_data["days"]:
-                day["recipe"] = self.recipe_fetcher.fetch_recipe(day["meal"])
+                if "preparation_instructions" in day and day["preparation_instructions"]:
+                    # AI provided instructions, use them
+                    day["recipe"] = {
+                        "name": day["meal"],
+                        "ingredients": day.get("ingredients", []),  # Use AI-provided ingredients, fallback to empty list
+                        "instructions": day["preparation_instructions"],
+                        "source": "AI Generated"
+                    }
+                else:
+                    # Fallback to RecipeFetcher if AI didn't provide instructions
+                    day["recipe"] = self.recipe_fetcher.fetch_recipe(day["meal"])
+                    if day["recipe"]:
+                        day["recipe"]["source"] = "RecipeFetcher"
+                    else: # Handle case where RecipeFetcher also fails
+                        day["recipe"] = {
+                            "name": day["meal"],
+                            "ingredients": [],
+                            "instructions": ["No instructions available."],
+                            "source": "None"
+                        }
             
             return plan_data
             

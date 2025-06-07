@@ -26,10 +26,11 @@
             </div>
             <div class="card-body">
                 <ul class="list-group list-group-flush">
-                    {% for ingredient in day.recipe.ingredients %}
+                    {% for ingredient in day.ingredients %}
                         <li class="list-group-item d-flex align-items-center">
                             <i class="fas fa-check-circle text-success me-2"></i>
-                            {{ ingredient }}
+                            {{ ingredient.quantity }} {{ ingredient.unit }} {{ ingredient.name }}
+                            {% if ingredient.category %}<span class="badge bg-light text-dark ms-2">{{ ingredient.category }}</span>{% endif %}
                         </li>
                     {% endfor %}
                 </ul>

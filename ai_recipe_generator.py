@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 # Initialize OpenAI
-import openai
+from openai import OpenAI
 
 # Initialize console for rich output
 console = Console()
@@ -18,14 +18,16 @@ class AIRecipeGenerator:
     
     def __init__(self):
         """Initialize the AI recipe generator."""
-        # Set up OpenAI client if API key is available
         api_key = os.getenv("OPENAI_API_KEY")
+        self.client = None  # Initialize client to None
         if api_key:
-            # Set the API key for OpenAI 0.28.0
-            openai.api_key = api_key
-            self.client = True  # Just a flag to indicate we have API access
+            try:
+                self.client = OpenAI(api_key=api_key) # New client initialization
+            except Exception as e:
+                # self.client remains None if initialization fails
+                console.print(f"[yellow]Warning: Failed to initialize OpenAI client: {e}. Using fallback methods.[/yellow]")
         else:
-            self.client = None
+            # self.client is already None
             console.print("[yellow]Warning: No OpenAI API key found. Using fallback methods.[/yellow]")
     
     def generate_meal_plan(self, 
@@ -54,62 +56,140 @@ class AIRecipeGenerator:
             if children_ages and len(children_ages) > 0:
                 children_text = f"with {len(children_ages)} {'child' if len(children_ages) == 1 else 'children'} aged {', '.join(map(str, children_ages))}"
             
+            # Sanitize inputs that will be part of f-strings to avoid issues with user-provided curly braces
+            safe_liked_foods_str = ', '.join([str(food).replace('{', '{{').replace('}', '}}') for food in liked_foods])
+            safe_disliked_foods_str = ', '.join([str(food).replace('{', '{{').replace('}', '}}') for food in disliked_foods])
+            safe_recent_meals_str = ', '.join([str(food).replace('{', '{{').replace('}', '}}') for food in recent_meals])
+
+            total_meals_for_ai = meal_count + 2 # Add 2 weekend meals
+
             # Construct the prompt for the AI
             system_prompt = f"""
-            You are a creative meal planning assistant for a family of {members} {children_text}.
-            Create a {meal_count}-day meal plan with meals that take around 30 minutes to cook.
-            The meals should be healthy and include oily fish at least once per week.
-            
+            You are an expert meal planning assistant for a family of {members} {children_text}.
+            Your goal is to create a {total_meals_for_ai}-day meal plan.
+            - For {meal_count} of the days (weekday meals), suggest EXISTING, well-known meals that have similar flavor profiles or ingredients to the family's liked foods. These meals should be relatively common, easy to find recipes for, and take around 30 minutes to cook.
+            - For 2 of the days (weekend meals), suggest meals that can take up to 60 minutes to cook. These can be a bit more involved or special.
+            - For ONE of the total {total_meals_for_ai} days, create a NEW, interesting dish that REMIXES one or more of the family's preferred meals, using similar ingredients but with a creative twist. This remixed meal can be a weekday or a weekend meal.
+            All meals should be healthy, and the plan should include oily fish at least once across the {total_meals_for_ai} days.
+
             IMPORTANT GUIDELINES:
-            1. Analyze the family's preferred meals and identify key ingredients, flavor profiles, and cooking techniques they enjoy.
-            2. Create new, interesting dishes that remix these preferred meals using similar ingredients but with creative twists.
-            3. Maintain familiarity while introducing variety - use ingredients they already like in new combinations.
-            4. Consider the children's preferences while ensuring nutritional balance.
-            5. Suggest meals that repurpose ingredients across multiple days to reduce waste and simplify shopping.
+            1. For existing meal suggestions: Analyze the family's preferred meals to understand their taste. Suggest existing dishes that align with this taste.
+            2. For the remixed meal: Be creative but ensure it's appealing and uses ingredients the family likely enjoys.
+            3. Meal Composition: Each meal MUST include a significant source of meat or fish protein. Each meal MUST also include at least three different types of vegetables (these can be part of the main dish or as sides). Suggest appropriate accompaniments like salads or bread where suitable.
+            4. Maintain variety and nutritional balance. Consider children's preferences.
+            5. Suggest meals that can repurpose ingredients to reduce waste.
+            6. You MUST include at least one meal containing oily fish (e.g., salmon, mackerel, sardines, trout) in the {total_meals_for_ai}-day plan. Clearly flag this meal.
+            7. For each meal, provide a detailed list of ingredients (including name, quantity, unit, and category).
+            8. For each meal, provide clear, step-by-step preparation instructions, including estimated timings, suitable for a ~30-minute total cooking time for weekday meals and up to 60 minutes for weekend meals.
             """
             
             # Extract ingredients from liked foods to help with remixing
-            liked_ingredients = self._extract_common_ingredients(liked_foods)
+            # liked_ingredients = self._extract_common_ingredients(liked_foods) # Commented out for performance
             
             user_prompt = f"""
-            Please create a creative {meal_count}-day meal plan for my family that remixes our favorite meals with new twists.
-            
-            PREFERRED MEALS: {', '.join(liked_foods)}
-            DISLIKED FOODS: {', '.join(disliked_foods)}
-            RECENT MEALS (please avoid repeating): {', '.join(recent_meals)}
-            
-            KEY INGREDIENTS WE ENJOY: {', '.join(liked_ingredients)}
-            
+            Please create a {total_meals_for_ai}-day meal plan for my family.
+            The first {meal_count} meals should be for weekdays and take approximately 30 minutes to prepare and cook.
+            The following 2 meals should be for the weekend (e.g., Day {meal_count + 1}, Day {meal_count + 2}) and can take up to 60 minutes to prepare and cook.
+            It is very important that the plan includes at least one meal with oily fish (e.g., salmon, mackerel, sardines, trout).
+
+            PREFERRED MEALS (use these to understand our taste and for the remixed meal): {safe_liked_foods_str}
+            DISLIKED FOODS: {safe_disliked_foods_str}
+            RECENT MEALS (please avoid repeating): {safe_recent_meals_str}
+
             IMPORTANT INSTRUCTIONS:
-            1. Create exactly {meal_count} NEW meal ideas that remix our preferred meals listed above
-            2. Use similar ingredients to what we enjoy, but with creative new combinations
-            3. Each meal should feel familiar yet exciting - like a new twist on something we already like
-            4. Include at least one meal with oily fish (salmon, mackerel, sardines, etc.)
-            5. Try to reuse ingredients across multiple days to reduce waste
-            6. ENSURE EACH MEAL IS UNIQUE - do not duplicate meals or create very similar variations
-            
+            1. Generate a total of {total_meals_for_ai} meal ideas.
+            2. If {total_meals_for_ai > 1}, {total_meals_for_ai - 1} of these meals should be EXISTING, well-known dishes. For these, select meals that you think we would enjoy based on our PREFERRED MEALS list.
+            3. ONE meal (or the only meal if {total_meals_for_ai == 1}) should be a CREATIVE REMIX of one or more of our PREFERRED MEALS.
+            4. Ensure at least one meal in the plan contains oily fish.
+            5. All meals should be unique within this plan.
+            6. Meal Composition: Every meal must contain a meat or fish protein and at least three different vegetables (these can be part of the main dish or as sides).
+            7. Accompaniments: Please suggest suitable accompaniments like a side salad, bread, or other relevant side dishes when appropriate for the meal.
+
             For each day, provide:
-            1. The name of the meal (make it appealing and descriptive)
-            2. A brief description explaining how it relates to our preferred meals
-            3. Whether it contains oily fish
-            
+            1. "day": The day number (e.g., "Day 1", "Day 2", ... "Day {total_meals_for_ai}").
+            2. "meal": The name of the meal.
+            3. "description": Explanation (existing or remixed), including any suggested accompaniments.
+            4. "is_remixed": true/false.
+            5. "contains_oily_fish": true/false.
+            6. "ingredients": List of objects (name, quantity, unit, category), including all main components, vegetables, and key accompaniment ingredients.
+            7. "preparation_instructions": List of strings (steps with timings appropriate for weekday ~30min or weekend ~60min).
+
             Format the response as a JSON object with this structure:
-            {{
+            {{  # Escaped curly braces for f-string
                 "days": [
+                    // ... (Example for a weekday meal, ~30 min) ...
                     {{
-                        "day": "Day 1",
-                        "meal": "Meal name",
-                        "description": "Brief description explaining how this remixes our preferred meals",
-                        "contains_oily_fish": true/false
+                        "day": "Day 1", 
+                        "meal": "Quick Weekday Salmon with Roasted Veg & Salad", 
+                        "description": "A fast and healthy salmon dish with roasted asparagus, broccoli, and cherry tomatoes, served with a side of mixed salad leaves. Similar to your liked grilled fish.",
+                        "is_remixed": false, 
+                        "contains_oily_fish": true,
+                        "ingredients": [
+                            {{"name": "Salmon Fillet", "quantity": "2", "unit": "pieces", "category": "Fish"}},
+                            {{"name": "Broccoli", "quantity": "1", "unit": "small head", "category": "Produce"}},
+                            {{"name": "Asparagus", "quantity": "1", "unit": "bunch", "category": "Produce"}},
+                            {{"name": "Cherry Tomatoes", "quantity": "1", "unit": "punnet", "category": "Produce"}},
+                            {{"name": "Mixed Salad Leaves", "quantity": "50", "unit": "grams", "category": "Produce"}},
+                            {{"name": "Olive Oil", "quantity": "1", "unit": "tbsp", "category": "Pantry"}}
+                        ],
+                        "preparation_instructions": ["Step 1: Toss vegetables with olive oil, roast for 15 mins.", "Step 2: Pan-fry salmon for 10 mins.", "Step 3: Serve salmon with roasted vegetables and salad."]
                     }},
-                    ...
+                    // ... (Example for a weekend meal, up to 60 min) ...
+                    {{
+                        "day": "Day {meal_count + 1}", 
+                        "meal": "Weekend Special Roast Chicken with Root Vegetables",
+                        "description": "A more involved roast chicken with potatoes, carrots, and onions, served with gravy. Perfect for a weekend.",
+                        "is_remixed": false, 
+                        "contains_oily_fish": false,
+                        "ingredients": [
+                            {{"name": "Whole Chicken", "quantity": "1", "unit": "kg", "category": "Poultry"}},
+                            {{"name": "Potatoes", "quantity": "500", "unit": "grams", "category": "Produce"}},
+                            {{"name": "Carrots", "quantity": "3", "unit": "medium", "category": "Produce"}},
+                            {{"name": "Onion", "quantity": "1", "unit": "large", "category": "Produce"}},
+                            {{"name": "Gravy Granules", "quantity": "2", "unit": "tbsp", "category": "Pantry"}}
+                        ],
+                        "preparation_instructions": ["Step 1: Prep chicken and vegetables (15 mins)...", "Step 2: Roast for 45-60 mins until cooked.", "Step 3: Make gravy and serve."]
+                    }},
+                     {{
+                        "day": "Day {meal_count + 2}", 
+                        "meal": "Hearty Weekend Beef Stew with Crusty Bread",
+                        "description": "A slow-cooked beef stew with carrots, celery, onions, and peas. Great for a relaxing weekend, served with crusty bread.",
+                        "is_remixed": false, 
+                        "contains_oily_fish": false,
+                        "ingredients": [
+                            {{"name": "Beef Chuck", "quantity": "500", "unit": "grams", "category": "Meat"}},
+                            {{"name": "Carrots", "quantity": "2", "unit": "large", "category": "Produce"}},
+                            {{"name": "Celery Sticks", "quantity": "2", "unit": "stalks", "category": "Produce"}},
+                            {{"name": "Onion", "quantity": "1", "unit": "medium", "category": "Produce"}},
+                            {{"name": "Peas", "quantity": "100", "unit": "grams", "category": "Produce/Frozen"}},
+                            {{"name": "Crusty Bread", "quantity": "1", "unit": "loaf", "category": "Bakery"}}
+                        ],
+                        "preparation_instructions": ["Step 1: Brown beef (10 mins)...", "Step 2: Sauté vegetables (5 mins)...", "Step 3: Simmer stew for 45-50 mins...", "Step 4: Serve with bread."]
+                    }},
+                     {{
+                        "day": "Day X", 
+                        "meal": "Creative Remixed Turkey Tacos with All The Fixings",
+                        "description": "A fun remix of your favorite taco night, using ground turkey. Served with lettuce, tomatoes, bell peppers, and salsa.",
+                        "is_remixed": true,
+                        "contains_oily_fish": false,
+                        "ingredients": [
+                            {{"name": "Ground Turkey", "quantity": "250", "unit": "grams", "category": "Poultry"}},
+                            {{"name": "Corn Tortillas", "quantity": "8", "unit": "pieces", "category": "Bakery"}},
+                            {{"name": "Lettuce", "quantity": "1/2", "unit": "head", "category": "Produce"}},
+                            {{"name": "Tomatoes", "quantity": "2", "unit": "medium", "category": "Produce"}},
+                            {{"name": "Bell Pepper", "quantity": "1", "unit": "medium", "category": "Produce"}},
+                            {{"name": "Salsa", "quantity": "1", "unit": "jar", "category": "Condiment"}},
+                            {{"name": "Taco Seasoning", "quantity": "1", "unit": "packet", "category": "Pantry"}}
+                        ],
+                        "preparation_instructions": ["Step 1: Cook turkey with taco seasoning (15 mins)...", "Step 2: Warm tortillas and chop vegetables...", "Step 3: Assemble tacos with all the fixings."]
+                    }}
                 ]
             }}
-            
-            IMPORTANT: Your response must be valid JSON and contain exactly {meal_count} unique meals.
+
+            IMPORTANT: Your response must be valid JSON. Ensure exactly one meal has "is_remixed": true (unless {total_meals_for_ai == 0}, then none). The total number of meals must be {total_meals_for_ai}.
             """
             
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -145,7 +225,7 @@ class AIRecipeGenerator:
             Focus on the main ingredients that define these dishes.
             """
             
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -221,7 +301,7 @@ class AIRecipeGenerator:
             The name should be catchy and descriptive. The description should be 1-2 sentences explaining the connection to the original dish.
             """
             
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_prompt},

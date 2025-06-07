@@ -2,7 +2,7 @@ import os
 import re
 import json
 import requests
-import openai
+from openai import OpenAI
 from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 from rich.console import Console
@@ -26,8 +26,7 @@ class ShoppingListManager:
         # Initialize OpenAI client if API key is available
         if self.openai_api_key:
             try:
-                openai.api_key = self.openai_api_key
-                self.client = openai
+                self.client = OpenAI(api_key=self.openai_api_key)
                 console.print("[green]OpenAI client initialized for ingredient normalization[/green]")
             except Exception as e:
                 console.print(f"[yellow]Warning: Could not initialize OpenAI client: {str(e)}[/yellow]")
@@ -35,41 +34,116 @@ class ShoppingListManager:
         
     def generate_shopping_list(self, meal_plan: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate a shopping list from a meal plan."""
-        shopping_list = []
-        all_ingredients = []  # Collect all ingredients first
-        
-        # Extract all ingredients from the meal plan
+        processed_ingredients_map = {}
+        raw_ingredient_strings = []
+
+        # Extract and segregate ingredients from the meal plan
         for day in meal_plan.get("days", []):
             recipe = day.get("recipe", {})
             ingredients = recipe.get("ingredients", [])
-            all_ingredients.extend(ingredients)
+            for ing in ingredients:
+                if isinstance(ing, dict) and all(k in ing for k in ["name", "quantity", "unit"]):
+                    # This is a pre-structured ingredient (likely from AI)
+                    name = ing["name"]
+                    quantity = ing["quantity"]
+                    unit = ing["unit"]
+                    category = ing.get("category", self._determine_category(name)) # Use AI category or determine
+                    original = ing.get("original", name)
+
+                    # Attempt to convert quantity to float for aggregation
+                    try:
+                        quantity_val = float(quantity)
+                    except ValueError:
+                        # If quantity is not a number (e.g., "to taste"), handle as a unique item or skip aggregation
+                        # For simplicity, we'll add it as is and rely on later steps or manual review
+                        key = f"{name.lower()}_{unit.lower()}_{category.lower()}_non_numeric_{len(processed_ingredients_map)}"
+                        processed_ingredients_map[key] = {
+                            "name": name,
+                            "quantity": quantity, # Keep original non-numeric quantity
+                            "unit": unit,
+                            "category": category,
+                            "original": original
+                        }
+                        continue
+                    
+                    key = f"{name.lower()}_{unit.lower()}_{category.lower()}"
+                    if key in processed_ingredients_map:
+                        try:
+                            processed_ingredients_map[key]["quantity"] += quantity_val
+                        except TypeError: # if existing quantity was also non-numeric
+                             pass # or handle error / log
+                        processed_ingredients_map[key]["original"] += f", {original}"
+                    else:
+                        processed_ingredients_map[key] = {
+                            "name": name,
+                            "quantity": quantity_val,
+                            "unit": unit,
+                            "category": category,
+                            "original": original
+                        }
+                elif isinstance(ing, str):
+                    # This is a raw ingredient string
+                    raw_ingredient_strings.append(ing)
+                # Else: unknown ingredient format, skip or log
+
+        # Process raw string ingredients if any
+        normalized_raw_ingredients = []
+        if raw_ingredient_strings:
+            if self.client:
+                normalized_raw_ingredients = self._normalize_ingredients_with_llm(raw_ingredient_strings)
+            else:
+                normalized_raw_ingredients = self._normalize_ingredients_with_regex(raw_ingredient_strings)
         
-        # Process ingredients based on available methods
-        if self.client:
-            # Use LLM to normalize and combine ingredients
-            normalized_ingredients = self._normalize_ingredients_with_llm(all_ingredients)
-        else:
-            # Use regex-based processing as fallback
-            normalized_ingredients = self._normalize_ingredients_with_regex(all_ingredients)
-        
-        # Convert normalized ingredients to shopping list format
-        for item in normalized_ingredients:
-            # Skip pantry items
-            if self._is_pantry_item(item["name"]):
+        # Combine normalized raw ingredients with already processed structured ingredients
+        for item in normalized_raw_ingredients:
+            name = item["name"]
+            quantity = item["quantity"]
+            unit = item["unit"]
+            category = item.get("category", self._determine_category(name))
+            original = item.get("original", name)
+            
+            try:
+                quantity_val = float(quantity)
+            except ValueError:
+                key = f"{name.lower()}_{unit.lower()}_{category.lower()}_non_numeric_{len(processed_ingredients_map)}"
+                processed_ingredients_map[key] = {
+                    "name": name,
+                    "quantity": quantity, 
+                    "unit": unit,
+                    "category": category,
+                    "original": original
+                }
                 continue
-                
-            shopping_list.append({
-                "name": item["name"],
-                "quantity": item["quantity"],
-                "unit": item["unit"],
-                "original": item.get("original", ""),
-                "category": item.get("category", "other")
-            })
+
+            key = f"{name.lower()}_{unit.lower()}_{category.lower()}"
+            if key in processed_ingredients_map:
+                try:
+                    processed_ingredients_map[key]["quantity"] += quantity_val
+                except TypeError:
+                    pass # if existing quantity was also non-numeric
+                processed_ingredients_map[key]["original"] += f", {original}"
+            else:
+                processed_ingredients_map[key] = {
+                    "name": name,
+                    "quantity": quantity_val,
+                    "unit": unit,
+                    "category": category,
+                    "original": original
+                }
+
+        # Convert map to list and filter pantry items
+        final_shopping_list = []
+        for item_data in processed_ingredients_map.values():
+            if self._is_pantry_item(item_data["name"]):
+                continue
+            # Convert numeric quantities back to string if needed, or ensure consistency
+            item_data["quantity"] = str(item_data["quantity"]) 
+            final_shopping_list.append(item_data)
         
         # Sort by category
-        shopping_list = self._categorize_and_sort(shopping_list)
+        final_shopping_list = self._categorize_and_sort(final_shopping_list)
         
-        return shopping_list
+        return final_shopping_list
     
     def _normalize_ingredients_with_llm(self, ingredients: List[str]) -> List[Dict[str, Any]]:
         """Use LLM to normalize and combine ingredients."""
@@ -118,7 +192,7 @@ class ShoppingListManager:
             """
             
             # Call the OpenAI API
-            response = self.client.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that normalizes and combines ingredients for a shopping list."},
